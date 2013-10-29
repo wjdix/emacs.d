@@ -2,21 +2,15 @@
 ;;; Commentary:
 
 ;;; Code:
-(when (not
-       (file-exists-p
-        (concat user-emacs-directory "init.el.base")))
-  (copy-file
-   (concat user-emacs-directory "init.el")
-   (concat user-emacs-directory "init.el.base")))
 
 (require 'org-install)
 (require 'ob-tangle)
-(org-babel-load-file (expand-file-name "init.org" user-emacs-directory))
 
 (setq user-full-name "William Dix")
 (setq user-mail-address "william.j.dix@gmail.com")
 
 (setenv "PATH" (concat "/opt/boxen/homebrew/bin:/usr/local/bin:/usr/local/Cellar/smlnj/110.75/libexec/bin:" (getenv "PATH")))
+(setenv "GOPATH" "/Users/wdix/go")
 (setq exec-path (cons "/usr/local/Cellar/smlnj/110.75/libexec/bin" exec-path))
 (setq exec-path (cons "/opt/boxen/homebrew/bin" exec-path))
 (setq exec-path (cons "/Users/wdix/go/bin" exec-path))
@@ -288,14 +282,10 @@
 
 (require 'go-autocomplete)
 (require 'auto-complete-config)
+(require 'go-focused-test)
 (add-to-list 'ac-modes 'go-mode)
 (define-key ac-mode-map (kbd "M-TAB") 'auto-complete)
 (add-hook 'after-init-hook #'global-flycheck-mode)
-
-(defun run-go-tests ()
-  (interactive)
-  (compile "go test -v .")
-  )
 
 (defun compilation-autoclose-on-success (status code msg)
   (when (and (eq status 'exit) (zerop code))
@@ -303,11 +293,43 @@
     (delete-window (get-buffer-window (get-buffer "*compilation*"))))
   (cons msg code))
 
-(add-hook 'go-mode-hook
-          '(lambda ()
-             (define-key go-mode-map [?\C-c ?\C-t] 'run-go-tests)
-	     (setq compilation-exit-message-function
-		   'compilation-autoclose-on-success)))
+(defun go-alternate-visit-at-point ()
+  "Visit alternate file to currently visited go buffer."
+  (interactive)
+  (switch-to-buffer (find-file (go-alternate-alternate-file-name))))
+
+(defun go-alternate-alternate-file-name ()
+  "Find alternate file name of open buffer."
+  (interactive)
+  (let ((dir (file-name-directory buffer-file-name))
+        (extension (file-name-extension buffer-file-name 't)))
+    
+    (unless (string= extension ".go")
+      (error "Not in a go file."))
+
+    (if (string-match "_test.go" buffer-file-name)
+        (go-alternate-implementation-file-name buffer-file-name)
+      (go-alternate-test-file-name buffer-file-name))))
+
+(defun go-alternate-implementation-file-name (file-name)
+  "Get name of implementation file corresponding to FILE-NAME."
+  (replace-regexp-in-string "_test.go" ".go" file-name))
+
+(defun go-alternate-test-file-name (file-name)
+  "Get name of test file corresponding to FILE-NAME."
+  (concat (file-name-sans-extension file-name) "_test.go"))
+
+(add-hook
+ 'go-mode-hook
+ '(lambda ()
+    (auto-complete-mode)
+    (define-key go-mode-map [?\C-c ?\C-t] 'run-go-tests)
+    (define-key go-mode-map [?\C-c ?\C-g] 'find-test-name-at-point)
+    (define-key go-mode-map [?\C-c ?\C-f] 'run-go-test-at-point)
+    (define-key go-mode-map [?\C-c ?\C-p] 'go-alternate-visit-at-point)
+    (setq
+     compilation-exit-message-function
+     'compilation-autoclose-on-success)))
 
 (provide 'init)
 ;;; init.el ends here
